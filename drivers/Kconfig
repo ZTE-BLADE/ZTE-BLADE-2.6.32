@@ -86,6 +86,8 @@ source "drivers/uwb/Kconfig"
 
 source "drivers/mmc/Kconfig"
 
+source "drivers/ar6000/Kconfig"
+
 source "drivers/memstick/Kconfig"
 
 source "drivers/leds/Kconfig"

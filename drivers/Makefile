@@ -93,6 +93,7 @@ obj-$(CONFIG_CPU_FREQ)		+= cpufreq/
 obj-$(CONFIG_CPU_IDLE)		+= cpuidle/
 obj-y				+= idle/
 obj-$(CONFIG_MMC)		+= mmc/
+obj-$(CONFIG_AR6000_WLAN)	+= ar6000/
 obj-$(CONFIG_MEMSTICK)		+= memstick/
 obj-$(CONFIG_NEW_LEDS)		+= leds/
 obj-$(CONFIG_SWITCH)		+= switch/

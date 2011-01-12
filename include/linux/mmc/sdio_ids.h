@@ -42,4 +42,9 @@
 #define SDIO_DEVICE_ID_SIANO_NOVA_A0		0x1100
 #define SDIO_DEVICE_ID_SIANO_STELLAR 		0x5347
 
+/* OpenMoko source - by t0mm13b. */
+#define SDIO_VENDOR_ID_ATHEROS                 0x0271
+#define SDIO_DEVICE_ID_ATHEROS_AR6001          0x0100
+#define SDIO_DEVICE_ID_ATHEROS_AR6002          0x0200
+
 #endif
