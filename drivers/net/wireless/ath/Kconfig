@@ -17,6 +17,7 @@ menuconfig ATH_COMMON
 
 if ATH_COMMON
 source "drivers/net/wireless/ath/ath5k/Kconfig"
+source "drivers/net/wireless/ath/ath6kl/Kconfig"
 source "drivers/net/wireless/ath/ath9k/Kconfig"
 source "drivers/net/wireless/ath/ar9170/Kconfig"
 endif
