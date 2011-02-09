@@ -5,7 +5,9 @@
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/timer.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
 #include <asm/io.h>
@@ -18,7 +20,7 @@
 
 #define   	FM_DBG(x...)   	printk(KERN_DEBUG"[FM]"x)
 #define   	FM_INFO(x...)   	printk(KERN_INFO"[FM]"x)
-#define 		FYA_TAG        "[FYA@FM_SI4708]"
+#define 	FYA_TAG        "[FYA@FM_SI4708]"
 
 struct fm_dev {
 	int   initialized;   			/* device opend times */
@@ -32,13 +34,21 @@ struct fm_dev {
     	char  vol;         			/* cached vol */          	  		      											                	 						                                   											                	  		
     	char regs[32];             		/* buffer for reading */	 		 			
 	struct i2c_client *client;
+	unsigned char* buffer;
+	unsigned int read_index;
+	unsigned int write_index;
 	spinlock_t lock;
 };
 
 static struct fm_dev *fm_si4708_dev;
-
+static unsigned int buffer_size = 50;
 static int si4708_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int si4708_remove(struct i2c_client *client);
+
+static struct timer_list rds_timer;
+static int rds_enabled = 1;
+static int rds_read_index = 0;
+static unsigned char rds_read_buffer[8];
 
 static int si4708_regs_read(struct i2c_client * client, char * buf, int count)
 {
@@ -129,7 +139,6 @@ static int si4708_set_vol(char vol)
 		
     	fm_si4708_dev->regs[FM_REG_SYSCONFIG2+1] &= ~REG_VOL_MASK; 
 	fm_si4708_dev->regs[FM_REG_SYSCONFIG2+1] |=  fm_si4708_dev->vol; 
-      
 	/*write  vol  to register*/
     	res = si4708_regs_write(fm_si4708_dev->client, &fm_si4708_dev->regs[FM_REG_WR_START], 8);
 	if(res < 0)
@@ -360,7 +369,7 @@ static int si4708_set_frequency(int frequency)
     		return res;
 	}
 
-	mdelay(SI4708_SEEK_TUNE_DELAY);    /*seek time*/
+	mdelay(SI4708_TUNE_DELAY);    /*seek time*/
 	   
 	/*check STC status*/
        res = si4708_regs_read(fm_si4708_dev->client, &fm_si4708_dev->regs[FM_REG_RD_START], 4); 
@@ -477,11 +486,108 @@ static int si4708_seek(int dir, int *p_frequency)
 }
 extern int snd_hph_amp_ctl(uint32_t on);
 
+
+
+static void setRDSEnabled(int enabled){
+    int ret;
+    ret = 0;
+    rds_enabled = enabled;
+    fm_si4708_dev->regs[FM_REG_SYSCONFIG1] &= ~0x90;
+    fm_si4708_dev->regs[FM_REG_SYSCONFIG1+1] &= ~0x04;
+    if (rds_enabled == 1) {	//switch on rds
+	fm_si4708_dev->regs[FM_REG_SYSCONFIG1] |= 0x90;
+        fm_si4708_dev->regs[FM_REG_SYSCONFIG1+1] |= 0x04;
+    }
+    ret = si4708_regs_write(fm_si4708_dev->client, &fm_si4708_dev->regs[FM_REG_WR_START], 8);
+    if(ret < 0)
+	fm_si4708_dev->initialized = 0;
+    if (rds_enabled == 1){
+        mod_timer(&rds_timer, jiffies + msecs_to_jiffies(100));
+    }
+}
+
+
+
+static int si4708_get_rds(void){
+    int avail = 0;
+    int i=0;
+    
+    if (rds_read_index == 0){
+	if (fm_si4708_dev->read_index == fm_si4708_dev->write_index) return 0;
+	memcpy(&rds_read_buffer,&fm_si4708_dev->buffer[fm_si4708_dev->read_index],8);
+	fm_si4708_dev->read_index+=8;
+	if (rds_enabled==2) setRDSEnabled(1);
+	if (fm_si4708_dev->read_index >= buffer_size*8) fm_si4708_dev->read_index = 0;
+    }
+    i=rds_read_index<<24 | rds_read_buffer[rds_read_index*3]<<16 | rds_read_buffer[rds_read_index*3+1]<<8;
+    if (rds_read_index != 2) {
+	i|=rds_read_buffer[rds_read_index*3+2];
+	rds_read_index++;
+    }
+    else {
+	if (fm_si4708_dev->read_index != fm_si4708_dev->write_index) avail = 1;
+	i|=avail;
+	rds_read_index = 0;
+    }
+    return i;
+}
+
+static void resetRDSBuffer(void){
+	fm_si4708_dev->read_index = 0;
+	fm_si4708_dev->write_index = 0;
+}
+
+
+static unsigned int readRDS(void){
+        int res = si4708_regs_read(fm_si4708_dev->client, &fm_si4708_dev->regs[FM_REG_STATUSRSSI], 12);
+	if(res <0)
+	{
+		fm_si4708_dev->initialized = 0;
+		return res;
+	}
+//		printk("RDS data %d, %d\n",fm_si4708_dev->read_index,fm_si4708_dev->write_index);
+	    if ((fm_si4708_dev->regs[0] & 0x80) == 0x80){
+		if ( ((fm_si4708_dev->regs[0] & 0x06) <=1) &&
+		((fm_si4708_dev->regs[2] & 0xC0) <=1) &&
+		((fm_si4708_dev->regs[2] & 0x30) <=1) &&
+		((fm_si4708_dev->regs[2] & 0x0C) <=1) ){
+			memcpy(&fm_si4708_dev->buffer[fm_si4708_dev->write_index],&fm_si4708_dev->regs[FM_REG_RDSA],2);
+			memcpy(&fm_si4708_dev->buffer[fm_si4708_dev->write_index+2],&fm_si4708_dev->regs[FM_REG_RDSB],2);
+			memcpy(&fm_si4708_dev->buffer[fm_si4708_dev->write_index+4],&fm_si4708_dev->regs[FM_REG_RDSC],2);
+			memcpy(&fm_si4708_dev->buffer[fm_si4708_dev->write_index+6],&fm_si4708_dev->regs[FM_REG_RDSD],2);
+			fm_si4708_dev->write_index += 8;
+			if (fm_si4708_dev->write_index >= buffer_size*8){
+			    fm_si4708_dev->write_index = 0;
+			}
+			if (fm_si4708_dev->write_index == fm_si4708_dev->read_index){
+			    setRDSEnabled(2);
+			    fm_si4708_dev->read_index+=8;
+			    if (fm_si4708_dev->read_index >= buffer_size*8){
+				fm_si4708_dev->read_index = 0;
+			    }
+			}
+		}
+		return 1;
+    	    }
+	    else{
+//		printk("RDS data MISSED\n");
+		return 0;
+	    }
+	    return 0;
+
+}
+
+static void timer_func(unsigned long data){
+    unsigned int next = 70+readRDS()*10;
+    if (rds_enabled == 1) mod_timer(&rds_timer,jiffies+msecs_to_jiffies(next));
+}
+
+
 static int si4708_open(struct inode *inode, struct file *filp)
 {
     	int res;
 	int sdio_state;
-
+	
 	snd_hph_amp_ctl(0);
     
 	if(fm_si4708_dev->initialized)
@@ -505,7 +611,7 @@ static int si4708_open(struct inode *inode, struct file *filp)
 
 		res = si4708_init2normal();
 		if( res > 0)
-		      fm_si4708_dev->initialized++;
+		     fm_si4708_dev->initialized++;
 	}
 
 	snd_hph_amp_ctl(1);
@@ -521,6 +627,8 @@ static int si4708_open(struct inode *inode, struct file *filp)
 	si4708_get_frequency();
 	return res < 0 ? res : 0;
 }
+
+
 static int si4708_release(struct inode *inode, struct file *filp)
 {
 	int res;
@@ -528,7 +636,7 @@ static int si4708_release(struct inode *inode, struct file *filp)
 	fm_si4708_dev->initialized = 0;
 	/* Make sure the device is power down. */
 	res = si4708_normal2standby();
-
+	rds_enabled=0;
 	return res < 0 ? res : 0;
 }
 
@@ -547,20 +655,23 @@ static int si4708_ioctl(struct inode *inode, struct file *filp,
 		break;
 		
 		case	FM_NORMAL2STANDBY:
+			setRDSEnabled(0);
 			res = si4708_normal2standby(); 
 		break;
 		
 		case	FM_STANDBY2NORMAL:
+			setRDSEnabled(1);
 			res = si4708_standby2normal();		
 		break;
 	
 		case 	FM_TUNE:
 			if (get_user(user_data,(int *)arg))
 			{
-	  		     res = -EFAULT;
+			     res = -EFAULT;
 				goto exit;
-    		       }
+		       }
 	        	res = si4708_set_frequency(user_data);
+	       	  resetRDSBuffer();
 	        break;
 
 		 case	 FM_SEEK:
@@ -569,7 +680,7 @@ static int si4708_ioctl(struct inode *inode, struct file *filp,
 	   		    res = -EFAULT;
 			    goto exit;
        		}
-	       	 res = si4708_seek(user_value[0], &user_value[1]);
+		res = si4708_seek(user_value[0], &user_value[1]);
 			 if(res < 0)
 			 	goto exit;
 			 if (copy_to_user((int *)arg,user_value, 2*sizeof(int)))
@@ -580,11 +691,11 @@ static int si4708_ioctl(struct inode *inode, struct file *filp,
 	        break;
 		
 		 case 	FM_GET_VOL:
-	       	  if (put_user((int)si4708_get_vol(), (int*)arg))
-	       	  {
-	            	       res = -EFAULT;
-			       goto exit;
-	       	  }
+		if (put_user((int)si4708_get_rds(), (int*)arg))
+		{
+		    res = -EFAULT;
+			goto exit;
+		}
 	        break;
 
 		 case 	FM_SET_VOL:
@@ -594,6 +705,11 @@ static int si4708_ioctl(struct inode *inode, struct file *filp,
 				goto exit;
     		       }
 	       	 res = si4708_set_vol(int_to_char(user_data)); 
+	       	 if (user_data>15){
+		    setRDSEnabled(1);
+	       	}else{
+		    setRDSEnabled(0);
+	       	}
 	        break;
 
 		 case 	FM_GET_BAND:
@@ -658,8 +774,7 @@ static int si4708_ioctl(struct inode *inode, struct file *filp,
 	       default:
 	              return  -ENOTTY;
       }
-
-exit:		
+    exit:		
    return res < 0 ?  res : 0;
 
 }
@@ -676,6 +791,9 @@ static struct miscdevice si4708_device = {
 	.name 	=  "si4708",
 	.fops 	= &si4708_fops,
 };
+
+
+
 static int si4708_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int res = 0;
@@ -689,12 +807,24 @@ static int si4708_probe(struct i2c_client *client, const struct i2c_device_id *i
 		goto init_exit;
 	}
 
+	fm_si4708_dev->buffer = kmalloc(buffer_size*8,GFP_KERNEL);
+	if (!fm_si4708_dev->buffer){
+		goto out;
+	}
+	fm_si4708_dev->read_index=0;
+	fm_si4708_dev->write_index=0;
+	
+	setup_timer(&rds_timer, timer_func, 1234);
+	
+	
 	fm_si4708_dev->initialized = 0;
 	res = misc_register(&si4708_device);
 	if(res)
 		goto out;
 	
-	FM_INFO(FYA_TAG"register fm_si4708 device successful!\n");
+	
+	
+	FM_INFO(FYA_TAG"register fm_si4708 device successful! 1\n");
 	fm_si4708_dev->client = client;
 	
 	return 0;

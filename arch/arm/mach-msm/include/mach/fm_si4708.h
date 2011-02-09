@@ -14,7 +14,8 @@
 #define      SI4708_RESET_DELAY               110   //ms
 #define      SI4708_POWERUP_DELAY         110   //ms
 #define      SI4708_POWERDOWN_DELAY         110  //ms
-#define      SI4708_SEEK_TUNE_DELAY       888  //ms,change from 60 to 888 for tune test 
+#define      SI4708_SEEK_TUNE_DELAY       550  //ms,change from 60 to 888 for tune test 
+#define      SI4708_TUNE_DELAY       60
 /****************************INTERNAL VARIBLE******************************/
 
 #define      SEEKUP  			1		/* seek up*/
@@ -51,6 +52,10 @@
 
 #define FM_REG_STATUSRSSI 0
 #define FM_REG_READCHAN     2
+#define FM_REG_RDSA     4
+#define FM_REG_RDSB     6
+#define FM_REG_RDSC     8
+#define FM_REG_RDSD     10
 
 #define FM_REG_DEVICEID 12
 #define FM_REG_CHIPID     14
