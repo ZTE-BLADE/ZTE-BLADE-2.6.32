@@ -869,7 +869,7 @@ int __init i2c_si4708_init(void)
 	res = i2c_add_driver(&si4708_driver);
 	if (res) 
 		FM_DBG(FYA_TAG"fm_si4708 add driver failed\n");
-	FM_INFO(FYA_TAG"fm_si4708 add driver successful\n");
+	FM_INFO(FYA_TAG"fm_si4708 (rds by andorko) add driver successful\n");
 	
 	return 0;
 } 
