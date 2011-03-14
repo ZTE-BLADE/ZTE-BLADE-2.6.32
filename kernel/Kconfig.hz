@@ -1,10 +1,163 @@
+  flibblesan 22 Dashboard Inbox 0 Account Settings Log Out Advanced Search  Explore GitHub Gist Blog Help
+TomGiordano / kernel_zte_blade
+
+Unwatch
+ 
+Your Fork
+ 11 6
+Source Commits Network Pull Requests (2) Issues (2) Graphs
+Tree: 9bab02f
+Switch Branches (2)
+Switch Tags (0)
+Branch List
+Downloads
+Linux kernel source for ZTE Blade
+HTTP
+Git Read-Only
+ This URL has Read-Only access
+Added BFQ and the ck2 patchset including BFS 
+
+Markus Cisler (author)
+3 days ago
+commit  9bab02f2ec0d8150c956
+tree    7adba462c626b999a66c
+parent  78457933fefbed598c36
+kernel_zte_blade / kernel / Kconfig.hz  
+Edit this file
+100644 126 lines (100 sloc) 3.168 kb rawblamehistory
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
 #
 # Timer Interrupt Frequency Configuration
 #
 
 choice
 	prompt "Timer frequency"
-	default HZ_250
+	default HZ_1000
 	help
 	 Allows the configuration of the timer frequency. It is customary
 	 to have the timer interrupt run at 1000 Hz but 100 Hz may be more
@@ -23,13 +176,14 @@ choice
 	  with lots of processors that may show reduced performance if
 	  too many timer interrupts are occurring.
 
-	config HZ_250
+	config HZ_250_NODEFAULT
 		bool "250 HZ"
 	help
-	 250 Hz is a good compromise choice allowing server performance
-	 while also showing good interactive responsiveness even
-	 on SMP and NUMA systems. If you are going to be using NTSC video
-	 or multimedia, selected 300Hz instead.
+	 250 HZ is a lousy compromise choice allowing server interactivity
+	 while also showing desktop throughput and no extra power saving on
+	 laptops. No good for anything.
+
+	 Recommend 100 or 1000 instead.
 
 	config HZ_300
 		bool "300 HZ"
@@ -43,16 +197,90 @@ choice
 		bool "1000 HZ"
 	help
 	 1000 Hz is the preferred choice for desktop systems and other
-	 systems requiring fast interactive responses to events.
+	 systems requiring fast interactive responses to events. Laptops
+	 can also benefit from this choice without sacrificing battery life
+	 if dynticks is also enabled.
+
+	config HZ_1500
+		bool "1500 HZ"
+	help
+	 1500 Hz is an insane value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
+	config HZ_2000
+		bool "2000 HZ"
+	help
+	 2000 Hz is an insane value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
+	config HZ_3000
+		bool "3000 HZ"
+	help
+	 3000 Hz is an insane value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
+	config HZ_4000
+		bool "4000 HZ"
+	help
+	 4000 Hz is an insane value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
+	config HZ_5000
+		bool "5000 HZ"
+	help
+	 5000 Hz is an obscene value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
+	config HZ_7500
+		bool "7500 HZ"
+	help
+	 7500 Hz is an obscene value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
+	config HZ_10000
+		bool "10000 HZ"
+	help
+	 10000 Hz is an obscene value to use to run broken software that is Hz
+	 limited.
+
+	 Being over 1000, driver breakage is likely.
+
 
 endchoice
 
 config HZ
 	int
 	default 100 if HZ_100
-	default 250 if HZ_250
+	default 250 if HZ_250_NODEFAULT
 	default 300 if HZ_300
 	default 1000 if HZ_1000
+	default 1500 if HZ_1500
+	default 2000 if HZ_2000
+	default 3000 if HZ_3000
+	default 4000 if HZ_4000
+	default 5000 if HZ_5000
+	default 7500 if HZ_7500
+	default 10000 if HZ_10000
 
 config SCHED_HRTICK
 	def_bool HIGH_RES_TIMERS && (!SMP || USE_GENERIC_SMP_HELPERS)
+
+Powered by the Dedicated Servers and
+Cloud Computing of Rackspace Hosting®
+BlogSupportTrainingJob BoardShopContactAPIStatus
+© 2011 GitHub Inc. All rights reserved.Terms of ServicePrivacySecurity
+EnglishDeutschFrançais日本語Português (BR)Русский中文
+See all available languages
+
